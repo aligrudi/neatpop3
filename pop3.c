@@ -155,13 +155,21 @@ static char *putstr(char *dst, char *src)
 	return dst + len;
 }
 
-static void login(void)
+static void login(char *user, char *pass)
 {
 	char line[BUFFSIZE];
 	int len;
-	send_cmd("USER " USERNAME "\n");
+	char *s = line;
+	s = putstr(s, "USER ");
+	s = putstr(s, user);
+	s = putstr(s, "\n");
+	send_cmd(line);
 	len = reply_line(line, sizeof(line));
-	send_cmd("PASS " PASSWORD "\n");
+	s = line;
+	s = putstr(s, "PASS ");
+	s = putstr(s, pass);
+	s = putstr(s, "\n");
+	send_cmd(line);
 	len = reply_line(line, sizeof(line));
 }
 
@@ -281,12 +289,12 @@ static void del_mail(int i)
 	send_cmd(cmd);
 }
 
-int main(int argc, char *argv[])
+static int fetch(struct account *account)
 {
 	char line[BUFFSIZE];
 	int len;
 	int i;
-	fd = pop3_connect(SERVER, PORT);
+	fd = pop3_connect(account->server, account->port);
 	if (fd == -1)
 		return 1;
 #ifdef SSL
@@ -303,7 +311,7 @@ int main(int argc, char *argv[])
 #endif
 	len = reply_line(line, sizeof(line));
 	print(line, len);
-	login();
+	login(account->user, account->pass);
 	mail_stat();
 	for (i = 0; i < nmails; i++)
 		req_mail(i);
@@ -326,5 +334,14 @@ int main(int argc, char *argv[])
 #ifdef SSL
 	ssl_free(&ssl);
 #endif
+	return 0;
+}
+
+int main(int argc, char *argv[])
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(accounts); i++)
+		if (fetch(&accounts[i]) == -1)
+			return 1;
 	return 0;
 }
