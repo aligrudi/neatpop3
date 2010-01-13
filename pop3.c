@@ -137,8 +137,8 @@ static void send_cmd(char *cmd)
 
 static int is_eoc(char *line, int len)
 {
-	line[len] = '\0';
-	return !strcmp(".\r\n", line);
+	return len < 4 && line[0] == '.' &&
+		(line[1] == '\r' || line[1] == '\n');
 }
 
 static char *putmem(char *dst, char *src, int len)
@@ -312,6 +312,7 @@ static int fetch(struct account *account)
 	int len;
 	int i;
 	char *s = line;
+	nmails = 0;
 	fd = pop3_connect(account->server, account->port);
 	if (fd == -1)
 		return 1;
