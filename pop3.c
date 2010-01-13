@@ -262,6 +262,7 @@ static int ret_mail(int i)
 	int ret;
 	if (mails[i].size + 100 > sizeof(mail))
 		return -1;
+	print(mails[i].name, strlen(mails[i].name));
 	s = put_from_(s);
 	while ((len = reply_line(line, sizeof(line))) != -1) {
 		if (is_eoc(line, len))
@@ -275,7 +276,14 @@ static int ret_mail(int i)
 		s = putmem(s, line, len);
 	}
 	*s++ = '\n';
-	ret = mail_write(dst ? dst : SPOOL, mail, s - mail);
+	if (!dst)
+		dst = SPOOL;
+	ret = mail_write(dst, mail, s - mail);
+	s = line;
+	s = putstr(s, " -> ");
+	s = putstr(s, dst);
+	s = putstr(s, "\n");
+	print(line, s - line);
 	return ret;
 }
 
@@ -294,9 +302,16 @@ static int fetch(struct account *account)
 	char line[BUFFSIZE];
 	int len;
 	int i;
+	char *s = line;
 	fd = pop3_connect(account->server, account->port);
 	if (fd == -1)
 		return 1;
+	s = putstr(s, "fetching ");
+	s = putstr(s, account->user);
+	s = putstr(s, "@");
+	s = putstr(s, account->server);
+	s = putstr(s, "\n");
+	print(line, s - line);
 #ifdef SSL
 	havege_init(&hs);
 	memset(&ssn, 0, sizeof(ssn));
@@ -310,15 +325,13 @@ static int fetch(struct account *account)
 	ssl_set_session(&ssl, 1, 600, &ssn);
 #endif
 	len = reply_line(line, sizeof(line));
-	print(line, len);
 	login(account->user, account->pass);
 	mail_stat();
 	for (i = 0; i < nmails; i++)
 		req_mail(i);
-	for (i = 0; i < nmails; i++) {
+	for (i = 0; i < nmails; i++)
 		if (ret_mail(i) == -1)
 			return 1;
-	}
 	if (DELMAILS) {
 		for (i = 0; i < nmails; i++)
 			del_mail(i);
