@@ -3,7 +3,6 @@
 #define FOLDER			"/home/me/.mailx/"
 #define SPOOL			(FOLDER "inbox")
 #define DELMAILS		0
-#define DEBUG
 #define SSL
 
 struct account {
