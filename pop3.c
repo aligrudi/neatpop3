@@ -315,7 +315,7 @@ static void del_mail(int i)
 	send_cmd(cmd);
 }
 
-static int fetch(struct account *account)
+static int fetch(struct account *account, int beg)
 {
 	char line[BUFFSIZE];
 	int len;
@@ -346,15 +346,15 @@ static int fetch(struct account *account)
 	len = reply_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
-	for (i = 0; i < nmails; i++)
+	for (i = beg; i < nmails; i++)
 		req_mail(i);
-	for (i = 0; i < nmails; i++)
+	for (i = beg; i < nmails; i++)
 		if (ret_mail(i) == -1)
 			return 1;
 	if (account->del) {
-		for (i = 0; i < nmails; i++)
+		for (i = beg; i < nmails; i++)
 			del_mail(i);
-		for (i = 0; i < nmails; i++)
+		for (i = beg; i < nmails; i++)
 			len = reply_line(line, sizeof(line));
 	}
 	send_cmd("QUIT\n");
@@ -372,8 +372,12 @@ static int fetch(struct account *account)
 int main(int argc, char *argv[])
 {
 	int i;
-	for (i = 0; i < ARRAY_SIZE(accounts); i++)
-		if (fetch(&accounts[i]) == -1)
+	for (i = 0; i < ARRAY_SIZE(accounts); i++) {
+		int beg = 0;
+		if (argc > i + 1 && isdigit(argv[i + 1][0]))
+			beg = atoi(argv[i + 1]);
+		if (fetch(&accounts[i], beg) == -1)
 			return 1;
+	}
 	return 0;
 }
