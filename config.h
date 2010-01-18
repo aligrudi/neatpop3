@@ -10,8 +10,9 @@ struct account {
 	char *port;
 	char *user;
 	char *pass;
+	int del;
 } accounts [] = {
-	{"server", "port", "username", "password"},
+	{"server", "port", "username", "password", 0},
 };
 
 struct filter {

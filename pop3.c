@@ -351,7 +351,7 @@ static int fetch(struct account *account)
 	for (i = 0; i < nmails; i++)
 		if (ret_mail(i) == -1)
 			return 1;
-	if (DELMAILS) {
+	if (account->del) {
 		for (i = 0; i < nmails; i++)
 			del_mail(i);
 		for (i = 0; i < nmails; i++)

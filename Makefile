@@ -1,6 +1,6 @@
 POLARPATH = /opt
 CC = diet cc
-CFLAGS = -std=gnu89 -pedantic -Wall -O2 -I$(POLARPATH)/include
+CFLAGS = -std=gnu89 -pedantic -Wall -O2 -I$(POLARPATH)/include/
 LDFLAGS = -s
 
 all: pop3
