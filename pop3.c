@@ -260,6 +260,13 @@ static char *put_from_(char *s)
 	return s;
 }
 
+static int lone_from(char *s)
+{
+	while (*s == '>')
+		s++;
+	return !strncmp("From ", s, 5);
+}
+
 static int ret_mail(int i)
 {
 	char mail[MAXSIZE];
@@ -282,6 +289,8 @@ static int ret_mail(int i)
 			hdr = 0;
 		if (hdr && !dst)
 			dst = mail_dst(line, len);
+		if (lone_from(line))
+			*s++ = '>';
 		s = putmem(s, line, len);
 	}
 	*s++ = '\n';
