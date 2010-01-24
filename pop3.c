@@ -225,7 +225,7 @@ static char *mail_dst(char *line, int len)
 	return NULL;
 }
 
-int xwrite(int fd, char *buf, int len)
+static int xwrite(int fd, char *buf, int len)
 {
 	int nw = 0;
 	while (nw < len) {
@@ -322,9 +322,8 @@ static int fetch(struct account *account, int beg)
 	int i;
 	char *s = line;
 	nmails = 0;
-	fd = pop3_connect(account->server, account->port);
-	if (fd == -1)
-		return 1;
+	if ((fd = pop3_connect(account->server, account->port)) == -1)
+		return -1;
 	s = putstr(s, "fetching ");
 	s = putstr(s, account->user);
 	s = putstr(s, "@");
