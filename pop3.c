@@ -324,6 +324,8 @@ static int fetch(struct account *account, int beg)
 	nmails = 0;
 	if ((fd = pop3_connect(account->server, account->port)) == -1)
 		return -1;
+	buf_cur = buf;
+	buf_end = buf;
 	s = putstr(s, "fetching ");
 	s = putstr(s, account->user);
 	s = putstr(s, "@");
