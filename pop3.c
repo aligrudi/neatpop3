@@ -315,11 +315,54 @@ static void del_mail(int i)
 	send_cmd(cmd);
 }
 
+static int ret_mails_nopipe(int beg)
+{
+	int i;
+	for (i = beg; i < nmails; i++) {
+		req_mail(i);
+		if (ret_mail(i) == -1)
+			return -1;
+	}
+	return 0;
+}
+
+static int ret_mails(int beg)
+{
+	int i;
+	for (i = beg; i < nmails; i++)
+		req_mail(i);
+	for (i = beg; i < nmails; i++)
+		if (ret_mail(i) == -1)
+			return -1;
+	return 0;
+}
+
+static int del_mails_nopipe(int beg)
+{
+	char line[BUFFSIZE];
+	int i;
+	for (i = beg; i < nmails; i++) {
+		del_mail(i);
+		reply_line(line, sizeof(line));
+	}
+	return 0;
+}
+
+static int del_mails(int beg)
+{
+	char line[BUFFSIZE];
+	int i;
+	for (i = beg; i < nmails; i++)
+		del_mail(i);
+	for (i = beg; i < nmails; i++)
+		 reply_line(line, sizeof(line));
+	return 0;
+}
+
 static int fetch(struct account *account, int beg)
 {
 	char line[BUFFSIZE];
 	int len;
-	int i;
 	char *s = line;
 	nmails = 0;
 	if ((fd = pop3_connect(account->server, account->port)) == -1)
@@ -347,17 +390,11 @@ static int fetch(struct account *account, int beg)
 	len = reply_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
-	for (i = beg; i < nmails; i++)
-		req_mail(i);
-	for (i = beg; i < nmails; i++)
-		if (ret_mail(i) == -1)
+	if ((account->nopipe ? ret_mails_nopipe : ret_mails)(beg))
+		return 1;
+	if (account->del)
+		if ((account->nopipe ? del_mails_nopipe : del_mails)(beg))
 			return 1;
-	if (account->del) {
-		for (i = beg; i < nmails; i++)
-			del_mail(i);
-		for (i = beg; i < nmails; i++)
-			len = reply_line(line, sizeof(line));
-	}
 	send_cmd("QUIT\n");
 	len = reply_line(line, sizeof(line));
 #ifdef SSL

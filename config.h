@@ -11,8 +11,9 @@ struct account {
 	char *user;
 	char *pass;
 	int del;
+	int nopipe;
 } accounts [] = {
-	{"server", "port", "username", "password", 0},
+	{"server", "port", "username", "password", 0, 0},
 };
 
 struct filter {
