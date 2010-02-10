@@ -27,11 +27,11 @@
 #define ARRAY_SIZE(a)		(sizeof(a) / sizeof((a)[0]))
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
 
-struct mailinfo {
+static struct mailinfo {
 	char name[1 << 4];
 	int size;
 } mails[MAXMAILS];
-int nmails;
+static int nmails;
 
 static int fd;
 static char buf[BUFFSIZE];
