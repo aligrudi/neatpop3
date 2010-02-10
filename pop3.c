@@ -315,47 +315,21 @@ static void del_mail(int i)
 	send_cmd(cmd);
 }
 
-static int ret_mails_nopipe(int beg)
-{
-	int i;
-	for (i = beg; i < nmails; i++) {
-		req_mail(i);
-		if (ret_mail(i) == -1)
-			return -1;
-	}
-	return 0;
-}
-
-static int ret_mails(int beg)
-{
-	int i;
-	for (i = beg; i < nmails; i++)
-		req_mail(i);
-	for (i = beg; i < nmails; i++)
-		if (ret_mail(i) == -1)
-			return -1;
-	return 0;
-}
-
-static int del_mails_nopipe(int beg)
+static int ret_mails(int beg, int end, int del)
 {
 	char line[BUFFSIZE];
 	int i;
-	for (i = beg; i < nmails; i++) {
-		del_mail(i);
-		reply_line(line, sizeof(line));
+	for (i = beg; i < end; i++)
+		req_mail(i);
+	for (i = beg; i < end; i++)
+		if (ret_mail(i) == -1)
+			return -1;
+	if (del) {
+		for (i = beg; i < end; i++)
+			del_mail(i);
+		for (i = beg; i < end; i++)
+			 reply_line(line, sizeof(line));
 	}
-	return 0;
-}
-
-static int del_mails(int beg)
-{
-	char line[BUFFSIZE];
-	int i;
-	for (i = beg; i < nmails; i++)
-		del_mail(i);
-	for (i = beg; i < nmails; i++)
-		 reply_line(line, sizeof(line));
 	return 0;
 }
 
@@ -364,6 +338,8 @@ static int fetch(struct account *account, int beg)
 	char line[BUFFSIZE];
 	int len;
 	char *s = line;
+	int batch;
+	int i;
 	nmails = 0;
 	if ((fd = pop3_connect(account->server, account->port)) == -1)
 		return -1;
@@ -390,10 +366,9 @@ static int fetch(struct account *account, int beg)
 	len = reply_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
-	if ((account->nopipe ? ret_mails_nopipe : ret_mails)(beg))
-		return 1;
-	if (account->del)
-		if ((account->nopipe ? del_mails_nopipe : del_mails)(beg))
+	batch = account->nopipe ? 1 : nmails - beg;
+	for (i = beg; i < nmails; i++)
+		if (ret_mails(i, i + batch, account->del))
 			return 1;
 	send_cmd("QUIT\n");
 	len = reply_line(line, sizeof(line));
