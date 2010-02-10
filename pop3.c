@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "config.h"
+#include "uidl.h"
 
 #define BUFFSIZE		(1 << 12)
 #define ARRAY_SIZE(a)		(sizeof(a) / sizeof((a)[0]))
@@ -29,9 +31,11 @@
 
 static struct mailinfo {
 	char name[1 << 4];
+	char id[1 << 5];
 	int size;
 } mails[MAXMAILS];
 static int nmails;
+struct uidl *uidl;
 
 static int fd;
 static char buf[BUFFSIZE];
@@ -238,6 +242,22 @@ static void mail_stat(void)
 	}
 }
 
+static void mail_uidl(void)
+{
+	char line[BUFFSIZE];
+	int len;
+	int i = 0;
+	send_cmd("UIDL\n");
+	len = reply_line(line, sizeof(line));
+	while ((len = reply_line(line, sizeof(line))) != -1 &&
+			!is_eoc(line, len)) {
+		char name[100];
+		char *s = line;
+		s = cutword(name, s);
+		s = cutword(mails[i++].id, s);
+	}
+}
+
 static void req_mail(int i)
 {
 	char cmd[100];
@@ -309,8 +329,6 @@ static int ret_mail(int i)
 	char *dst = NULL;
 	int hdr = 1;
 	int ret;
-	if (mails[i].size + 100 > sizeof(mail))
-		return -1;
 	print(mails[i].name, strlen(mails[i].name));
 	s = put_from_(s);
 	while ((len = reply_line(line, sizeof(line))) != -1) {
@@ -342,9 +360,14 @@ static void del_mail(int i)
 	send_cmd(cmd);
 }
 
-static int mail_ok(int i)
+static int size_ok(int i)
 {
 	return mails[i].size + 100 < MAXSIZE;
+}
+
+static int uidl_new(int i)
+{
+	return !uidl || !uidl_find(uidl, mails[i].id);
 }
 
 static int ret_mails(int beg, int end, int del)
@@ -352,24 +375,28 @@ static int ret_mails(int beg, int end, int del)
 	char line[BUFFSIZE];
 	int i;
 	for (i = beg; i < end; i++)
-		if (mail_ok(i))
+		if (size_ok(i) && uidl_new(i))
 			req_mail(i);
-	for (i = beg; i < end; i++)
-		if (mail_ok(i))
+	for (i = beg; i < end; i++) {
+		if (size_ok(i) && uidl_new(i)) {
 			if (ret_mail(i) == -1)
 				return -1;
+			if (uidl)
+				uidl_add(uidl, mails[i].id);
+		}
+	}
 	if (del) {
 		for (i = beg; i < end; i++)
-			if (mail_ok(i))
+			if ((!uidl && size_ok(i)) || (uidl && !uidl_new(i)))
 				del_mail(i);
 		for (i = beg; i < end; i++)
-			if (mail_ok(i))
-				 reply_line(line, sizeof(line));
+			if ((!uidl && size_ok(i)) || (uidl && !uidl_new(i)))
+				reply_line(line, sizeof(line));
 	}
 	return 0;
 }
 
-static int fetch(struct account *account, int beg)
+static int fetch(struct account *account)
 {
 	char line[BUFFSIZE];
 	int len;
@@ -380,29 +407,40 @@ static int fetch(struct account *account, int beg)
 		return -1;
 	buf_cur = buf;
 	buf_end = buf;
+	if (account->uidl)
+		uidl = uidl_read(account->uidl);
 	sprintf(line, "fetching %s@%s\n", account->user, account->server);
 	print(line, strlen(line));
 	len = reply_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
-	batch = account->nopipe ? 1 : nmails - beg;
-	for (i = beg; i < nmails; i++)
-		if (ret_mails(i, i + batch, account->del))
-			return 1;
+	if (account->uidl)
+		mail_uidl();
+	batch = account->nopipe ? 1 : nmails;
+	for (i = 0; i < nmails; i += batch)
+		ret_mails(i, i + batch, account->del);
 	send_cmd("QUIT\n");
 	len = reply_line(line, sizeof(line));
 	pop3_free();
+	if (uidl)
+		uidl_save(uidl);
+	uidl = NULL;
 	return 0;
+}
+
+static void sigint(int sig)
+{
+	if (uidl)
+		uidl_save(uidl);
+	exit(1);
 }
 
 int main(int argc, char *argv[])
 {
 	int i;
+	signal(SIGINT, sigint);
 	for (i = 0; i < ARRAY_SIZE(accounts); i++) {
-		int beg = 0;
-		if (argc > i + 1 && isdigit(argv[i + 1][0]))
-			beg = atoi(argv[i + 1]);
-		if (fetch(&accounts[i], beg) == -1)
+		if (fetch(&accounts[i]) == -1)
 			return 1;
 	}
 	return 0;

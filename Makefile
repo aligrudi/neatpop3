@@ -7,7 +7,7 @@ all: pop3
 .c.o:
 	$(CC) -c $(CFLAGS) $<
 pop3.o: config.h
-pop3: pop3.o
+pop3: pop3.o uidl.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 clean:
 	rm -f *.o pop3
