@@ -315,20 +315,29 @@ static void del_mail(int i)
 	send_cmd(cmd);
 }
 
+static int mail_ok(int i)
+{
+	return mails[i].size + 100 < MAXSIZE;
+}
+
 static int ret_mails(int beg, int end, int del)
 {
 	char line[BUFFSIZE];
 	int i;
 	for (i = beg; i < end; i++)
-		req_mail(i);
+		if (mail_ok(i))
+			req_mail(i);
 	for (i = beg; i < end; i++)
-		if (ret_mail(i) == -1)
-			return -1;
+		if (mail_ok(i))
+			if (ret_mail(i) == -1)
+				return -1;
 	if (del) {
 		for (i = beg; i < end; i++)
-			del_mail(i);
+			if (mail_ok(i))
+				del_mail(i);
 		for (i = beg; i < end; i++)
-			 reply_line(line, sizeof(line));
+			if (mail_ok(i))
+				 reply_line(line, sizeof(line));
 	}
 	return 0;
 }
