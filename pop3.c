@@ -68,7 +68,8 @@ static int pop3_connect(char *addr, char *port)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
-	getaddrinfo(addr, port, &hints, &addrinfo);
+	if (getaddrinfo(addr, port, &hints, &addrinfo))
+		return -1;
 	fd = socket(addrinfo->ai_family, addrinfo->ai_socktype,
 			addrinfo->ai_protocol);
 
