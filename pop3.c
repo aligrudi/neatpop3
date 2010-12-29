@@ -210,16 +210,10 @@ static void login(char *user, char *pass)
 {
 	char line[BUFFSIZE];
 	int len;
-	char *s = line;
-	s = putstr(s, "USER ");
-	s = putstr(s, user);
-	s = putstr(s, "\n");
+	sprintf(line, "USER %s\n", user);
 	send_cmd(line);
 	len = reply_line(line, sizeof(line));
-	s = line;
-	s = putstr(s, "PASS ");
-	s = putstr(s, pass);
-	s = putstr(s, "\n");
+	sprintf(line, "PASS %s\n", pass);
 	send_cmd(line);
 	len = reply_line(line, sizeof(line));
 }
@@ -247,10 +241,7 @@ static void mail_stat(void)
 static void req_mail(int i)
 {
 	char cmd[100];
-	char *s = cmd;
-	s = putstr(s, "RETR ");
-	s = putstr(s, mails[i].name);
-	s = putstr(s, "\n");
+	sprintf(cmd, "RETR %s\n", mails[i].name);
 	send_cmd(cmd);
 }
 
@@ -339,21 +330,15 @@ static int ret_mail(int i)
 	if (!dst)
 		dst = SPOOL;
 	ret = mail_write(dst, mail, s - mail);
-	s = line;
-	s = putstr(s, " -> ");
-	s = putstr(s, dst);
-	s = putstr(s, "\n");
-	print(line, s - line);
+	sprintf(line, " -> %s\n", dst);
+	print(line, strlen(line));
 	return ret;
 }
 
 static void del_mail(int i)
 {
 	char cmd[100];
-	char *s = cmd;
-	s = putstr(s, "DELE ");
-	s = putstr(s, mails[i].name);
-	s = putstr(s, "\n");
+	sprintf(cmd, "DELE %s\n", mails[i].name);
 	send_cmd(cmd);
 }
 
@@ -388,7 +373,6 @@ static int fetch(struct account *account, int beg)
 {
 	char line[BUFFSIZE];
 	int len;
-	char *s = line;
 	int batch;
 	int i;
 	nmails = 0;
@@ -396,12 +380,8 @@ static int fetch(struct account *account, int beg)
 		return -1;
 	buf_cur = buf;
 	buf_end = buf;
-	s = putstr(s, "fetching ");
-	s = putstr(s, account->user);
-	s = putstr(s, "@");
-	s = putstr(s, account->server);
-	s = putstr(s, "\n");
-	print(line, s - line);
+	sprintf(line, "fetching %s@%s\n", account->user, account->server);
+	print(line, strlen(line));
 	len = reply_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
