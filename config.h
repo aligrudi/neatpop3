@@ -2,7 +2,7 @@
 #define MAXSIZE			(1 << 21)
 #define FOLDER			"/home/me/.mailx/"
 #define SPOOL			(FOLDER "inbox")
-#define DELMAILS		0
+#define DPRINT(msg, len)
 #define SSL
 
 struct account {

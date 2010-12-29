@@ -56,12 +56,58 @@ static int ps_recv(void *ctx, unsigned char *buf, int len)
 	return read(*(int *) ctx, buf, len);
 }
 
+static int pop3_read(char *buf, int len)
+{
+	return ssl_read(&ssl, (unsigned char *) buf, sizeof(buf));
+}
+
+static int pop3_write(char *buf, int len)
+{
+	return ssl_write(&ssl, (unsigned char *) buf, len);
+}
+
+static int pop3s_init(void)
+{
+	havege_init(&hs);
+	memset(&ssn, 0, sizeof(ssn));
+	if (ssl_init(&ssl))
+		return 1;
+	ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
+	ssl_set_authmode(&ssl, SSL_VERIFY_NONE);
+	ssl_set_rng(&ssl, havege_rand, &hs);
+	ssl_set_bio(&ssl, ps_recv, &fd, ps_send, &fd);
+	ssl_set_ciphers(&ssl, ssl_default_ciphers);
+	ssl_set_session(&ssl, 1, 600, &ssn);
+	return 0;
+}
+
+static int pop3s_free(void)
+{
+	ssl_close_notify(&ssl);
+	ssl_free(&ssl);
+	return 0;
+}
+
+#else
+
+static int pop3_read(char *buf, int len)
+{
+	return read(fd, buf, len);
+}
+
+static int pop3_write(char *buf, int len)
+{
+	return write(fd, buf, len);
+}
+
+#define pop3s_init()		(0)
+#define pop3s_free()		(0)
+
 #endif
 
 static int pop3_connect(char *addr, char *port)
 {
 	struct addrinfo hints, *addrinfo;
-	int fd;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -79,7 +125,16 @@ static int pop3_connect(char *addr, char *port)
 		return -1;
 	}
 	freeaddrinfo(addrinfo);
-	return fd;
+	if (pop3s_init())
+		return -1;
+	return 0;
+}
+
+static int pop3_free(void)
+{
+	pop3s_free();
+	close(fd);
+	return 0;
 }
 
 static void print(char *buf, int len)
@@ -94,17 +149,10 @@ static int reply_line(char *dst, int len)
 	while (nr < len) {
 		int ml;
 		if (!buf_cur || buf_cur >= buf_end) {
-#ifdef SSL
-			int buf_len = ssl_read(&ssl, (unsigned char *) buf,
-						sizeof(buf));
-#else
-			int buf_len = read(fd, buf, sizeof(buf));
-#endif
+			int buf_len = pop3_read(buf, sizeof(buf));
 			if (buf_len <= 0)
 				return -1;
-#ifdef DEBUG
-			print(buf, buf_len);
-#endif
+			DPRINT(buf, buf_len);
 			buf_cur = buf;
 			buf_end = buf + buf_len;
 		}
@@ -125,15 +173,8 @@ static int reply_line(char *dst, int len)
 
 static void send_cmd(char *cmd)
 {
-#ifdef SSL
-	ssl_write(&ssl, (unsigned char *) cmd, strlen(cmd));
-#else
-	write(fd, cmd, strlen(cmd));
-#endif
-	fsync(fd);
-#ifdef DEBUG
-	print(cmd, strlen(cmd));
-#endif
+	pop3_write(cmd, strlen(cmd));
+	DPRINT(cmd, strlen(cmd));
 }
 
 static int is_eoc(char *line, int len)
@@ -351,7 +392,7 @@ static int fetch(struct account *account, int beg)
 	int batch;
 	int i;
 	nmails = 0;
-	if ((fd = pop3_connect(account->server, account->port)) == -1)
+	if (pop3_connect(account->server, account->port))
 		return -1;
 	buf_cur = buf;
 	buf_end = buf;
@@ -361,18 +402,6 @@ static int fetch(struct account *account, int beg)
 	s = putstr(s, account->server);
 	s = putstr(s, "\n");
 	print(line, s - line);
-#ifdef SSL
-	havege_init(&hs);
-	memset(&ssn, 0, sizeof(ssn));
-	if (ssl_init(&ssl))
-		return 1;
-	ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
-	ssl_set_authmode(&ssl, SSL_VERIFY_NONE);
-	ssl_set_rng(&ssl, havege_rand, &hs);
-	ssl_set_bio(&ssl, ps_recv, &fd, ps_send, &fd);
-	ssl_set_ciphers(&ssl, ssl_default_ciphers);
-	ssl_set_session(&ssl, 1, 600, &ssn);
-#endif
 	len = reply_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
@@ -382,13 +411,7 @@ static int fetch(struct account *account, int beg)
 			return 1;
 	send_cmd("QUIT\n");
 	len = reply_line(line, sizeof(line));
-#ifdef SSL
-	ssl_close_notify(&ssl);
-#endif
-	close(fd);
-#ifdef SSL
-	ssl_free(&ssl);
-#endif
+	pop3_free();
 	return 0;
 }
 
