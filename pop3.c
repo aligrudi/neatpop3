@@ -1,29 +1,23 @@
 /*
  * pop3 - a simple pop3 mail client
  *
- * Copyright (C) 2010 Ali Gholami Rudi
+ * Copyright (C) 2010-2011 Ali Gholami Rudi
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License, as published by the
- * Free Software Foundation.
+ * This program is released under GNU GPL version 2.
  */
-#include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 #include "config.h"
 #include "uidl.h"
+#include "conn.h"
 
 #define BUFFSIZE		(1 << 12)
 #define ARRAY_SIZE(a)		(sizeof(a) / sizeof((a)[0]))
@@ -35,111 +29,12 @@ static struct mailinfo {
 	int size;
 } mails[MAXMAILS];
 static int nmails;
-struct uidl *uidl;
+static struct uidl *uidl;
 
-static int fd;
 static char buf[BUFFSIZE];
 static char *buf_cur;
 static char *buf_end;
-
-#ifdef SSL
-#include <polarssl/ssl.h>
-#include <polarssl/havege.h>
-
-static ssl_context ssl;
-static ssl_session ssn;
-static havege_state hs;
-
-static int ps_send(void *ctx, unsigned char *buf, int len)
-{
-	return write(*(int *) ctx, buf, len);
-}
-
-static int ps_recv(void *ctx, unsigned char *buf, int len)
-{
-	return read(*(int *) ctx, buf, len);
-}
-
-static int pop3_read(char *buf, int len)
-{
-	return ssl_read(&ssl, (unsigned char *) buf, sizeof(buf));
-}
-
-static int pop3_write(char *buf, int len)
-{
-	return ssl_write(&ssl, (unsigned char *) buf, len);
-}
-
-static int pop3s_init(void)
-{
-	havege_init(&hs);
-	memset(&ssn, 0, sizeof(ssn));
-	if (ssl_init(&ssl))
-		return 1;
-	ssl_set_endpoint(&ssl, SSL_IS_CLIENT);
-	ssl_set_authmode(&ssl, SSL_VERIFY_NONE);
-	ssl_set_rng(&ssl, havege_rand, &hs);
-	ssl_set_bio(&ssl, ps_recv, &fd, ps_send, &fd);
-	ssl_set_ciphers(&ssl, ssl_default_ciphers);
-	ssl_set_session(&ssl, 1, 600, &ssn);
-	return 0;
-}
-
-static int pop3s_free(void)
-{
-	ssl_close_notify(&ssl);
-	ssl_free(&ssl);
-	return 0;
-}
-
-#else
-
-static int pop3_read(char *buf, int len)
-{
-	return read(fd, buf, len);
-}
-
-static int pop3_write(char *buf, int len)
-{
-	return write(fd, buf, len);
-}
-
-#define pop3s_init()		(0)
-#define pop3s_free()		(0)
-
-#endif
-
-static int pop3_connect(char *addr, char *port)
-{
-	struct addrinfo hints, *addrinfo;
-
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
-
-	if (getaddrinfo(addr, port, &hints, &addrinfo))
-		return -1;
-	fd = socket(addrinfo->ai_family, addrinfo->ai_socktype,
-			addrinfo->ai_protocol);
-
-	if (connect(fd, addrinfo->ai_addr, addrinfo->ai_addrlen) == -1) {
-		close(fd);
-		freeaddrinfo(addrinfo);
-		return -1;
-	}
-	freeaddrinfo(addrinfo);
-	if (pop3s_init())
-		return -1;
-	return 0;
-}
-
-static int pop3_free(void)
-{
-	pop3s_free();
-	close(fd);
-	return 0;
-}
+static struct conn *conn;
 
 static void print(char *buf, int len)
 {
@@ -153,7 +48,7 @@ static int reply_line(char *dst, int len)
 	while (nr < len) {
 		int ml;
 		if (!buf_cur || buf_cur >= buf_end) {
-			int buf_len = pop3_read(buf, sizeof(buf));
+			int buf_len = conn_read(conn, buf, sizeof(buf));
 			if (buf_len <= 0)
 				return -1;
 			DPRINT(buf, buf_len);
@@ -177,7 +72,7 @@ static int reply_line(char *dst, int len)
 
 static void send_cmd(char *cmd)
 {
-	pop3_write(cmd, strlen(cmd));
+	conn_write(conn, cmd, strlen(cmd));
 	DPRINT(cmd, strlen(cmd));
 }
 
@@ -403,7 +298,8 @@ static int fetch(struct account *account)
 	int batch;
 	int i;
 	nmails = 0;
-	if (pop3_connect(account->server, account->port))
+	conn = conn_connect(account->server, account->port, account->cert);
+	if (!conn)
 		return -1;
 	buf_cur = buf;
 	buf_end = buf;
@@ -421,7 +317,7 @@ static int fetch(struct account *account)
 		ret_mails(i, i + batch, account->del);
 	send_cmd("QUIT\n");
 	len = reply_line(line, sizeof(line));
-	pop3_free();
+	conn_close(conn);
 	if (uidl)
 		uidl_save(uidl);
 	uidl = NULL;

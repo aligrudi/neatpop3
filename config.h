@@ -3,7 +3,6 @@
 #define FOLDER			"/home/me/.mailx/"
 #define SPOOL			(FOLDER "inbox")
 #define DPRINT(msg, len)
-#define SSL
 
 struct account {
 	char *server;
@@ -11,6 +10,7 @@ struct account {
 	char *user;
 	char *pass;
 	char *uidl;
+	char *cert;
 	int del;
 	int nopipe;
 } accounts [] = {
