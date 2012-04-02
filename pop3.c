@@ -1,7 +1,7 @@
 /*
  * pop3 - a simple pop3 mail client
  *
- * Copyright (C) 2010-2011 Ali Gholami Rudi
+ * Copyright (C) 2010-2012 Ali Gholami Rudi
  *
  * This program is released under GNU GPL version 2.
  */
@@ -203,7 +203,7 @@ static char *put_from_(char *s)
 	time_t t;
 	time(&t);
 	s = putstr(s, "From ");
-	s = putstr(s, getlogin());
+	s = putstr(s, getenv("USER") ? getenv("USER") : "root");
 	s += strftime(s, MAXSIZE, " %a %b %d %H:%M:%S %Y\n", localtime(&t));
 	return s;
 }
@@ -314,7 +314,7 @@ static int fetch(struct account *account)
 		mail_uidl();
 	batch = account->nopipe ? 1 : nmails;
 	for (i = 0; i < nmails; i += batch)
-		ret_mails(i, i + batch, account->del);
+		ret_mails(i, MIN(nmails, i + batch), account->del);
 	send_cmd("QUIT\n");
 	len = reply_line(line, sizeof(line));
 	conn_close(conn);
