@@ -35,6 +35,7 @@ static char buf[BUFFSIZE];
 static char *buf_cur;
 static char *buf_end;
 static struct conn *conn;
+static char *mailbuf;
 
 static void print(char *buf, int len)
 {
@@ -217,9 +218,8 @@ static int lone_from(char *s)
 
 static int ret_mail(int i)
 {
-	char mail[MAXSIZE];
 	char line[BUFFSIZE];
-	char *s = mail;
+	char *s = mailbuf;
 	int len = reply_line(line, sizeof(line));
 	char *dst = NULL;
 	int hdr = 1;
@@ -242,7 +242,7 @@ static int ret_mail(int i)
 	*s++ = '\n';
 	if (!dst)
 		dst = SPOOL;
-	ret = mail_write(dst, mail, s - mail);
+	ret = mail_write(dst, mailbuf, s - mailbuf);
 	sprintf(line, " -> %s\n", dst);
 	print(line, strlen(line));
 	return ret;
@@ -335,9 +335,10 @@ int main(int argc, char *argv[])
 {
 	int i;
 	signal(SIGINT, sigint);
-	for (i = 0; i < ARRAY_SIZE(accounts); i++) {
+	mailbuf = malloc(MAXSIZE);
+	for (i = 0; i < ARRAY_SIZE(accounts); i++)
 		if (fetch(&accounts[i]) == -1)
 			return 1;
-	}
+	free(mailbuf);
 	return 0;
 }
