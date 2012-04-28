@@ -109,10 +109,10 @@ static void login(char *user, char *pass)
 {
 	char line[BUFFSIZE];
 	int len;
-	sprintf(line, "USER %s\n", user);
+	sprintf(line, "USER %s\r\n", user);
 	send_cmd(line);
 	len = reply_line(line, sizeof(line));
-	sprintf(line, "PASS %s\n", pass);
+	sprintf(line, "PASS %s\r\n", pass);
 	send_cmd(line);
 	len = reply_line(line, sizeof(line));
 }
@@ -121,10 +121,10 @@ static void mail_stat(void)
 {
 	char line[BUFFSIZE];
 	int len;
-	send_cmd("STAT\n");
+	send_cmd("STAT\r\n");
 	len = reply_line(line, sizeof(line));
 	print(line, len);
-	send_cmd("LIST\n");
+	send_cmd("LIST\r\n");
 	len = reply_line(line, sizeof(line));
 	while ((len = reply_line(line, sizeof(line))) != -1) {
 		struct mailinfo *mail;
@@ -142,7 +142,7 @@ static void mail_uidl(void)
 	char line[BUFFSIZE];
 	int len;
 	int i = 0;
-	send_cmd("UIDL\n");
+	send_cmd("UIDL\r\n");
 	len = reply_line(line, sizeof(line));
 	while ((len = reply_line(line, sizeof(line))) != -1 &&
 			!is_eoc(line, len)) {
@@ -156,7 +156,7 @@ static void mail_uidl(void)
 static void req_mail(int i)
 {
 	char cmd[100];
-	sprintf(cmd, "RETR %s\n", mails[i].name);
+	sprintf(cmd, "RETR %s\r\n", mails[i].name);
 	send_cmd(cmd);
 }
 
@@ -251,7 +251,7 @@ static int ret_mail(int i)
 static void del_mail(int i)
 {
 	char cmd[100];
-	sprintf(cmd, "DELE %s\n", mails[i].name);
+	sprintf(cmd, "DELE %s\r\n", mails[i].name);
 	send_cmd(cmd);
 }
 
@@ -315,7 +315,7 @@ static int fetch(struct account *account)
 	batch = account->nopipe ? 1 : nmails;
 	for (i = 0; i < nmails; i += batch)
 		ret_mails(i, MIN(nmails, i + batch), account->del);
-	send_cmd("QUIT\n");
+	send_cmd("QUIT\r\n");
 	len = reply_line(line, sizeof(line));
 	conn_close(conn);
 	if (uidl)
