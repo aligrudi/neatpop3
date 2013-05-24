@@ -22,6 +22,7 @@
 #define BUFFSIZE		(1 << 12)
 #define ARRAY_SIZE(a)		(sizeof(a) / sizeof((a)[0]))
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
+#define PRINT(s, l)		(write(1, (s), (l)))
 
 static struct mailinfo {
 	char name[1 << 4];
@@ -32,43 +33,34 @@ static int nmails;
 static struct uidl *uidl;
 
 static char buf[BUFFSIZE];
-static char *buf_cur;
-static char *buf_end;
+static int buf_len;
+static int buf_pos;
 static struct conn *conn;
 static char *mailbuf;
 
-static void print(char *buf, int len)
+static int pop3_read(void)
 {
-	write(STDOUT_FILENO, buf, len);
+	if (buf_pos == buf_len) {
+		buf_len = conn_read(conn, buf, sizeof(buf));
+		buf_pos = 0;
+	}
+	return buf_pos < buf_len ? (unsigned char) buf[buf_pos++] : -1;
 }
 
-static int reply_line(char *dst, int len)
+static int pop3_line(char *dst, int len)
 {
-	int nr = 0;
-	char *nl;
-	while (nr < len) {
-		int ml;
-		if (!buf_cur || buf_cur >= buf_end) {
-			int buf_len = conn_read(conn, buf, sizeof(buf));
-			if (buf_len <= 0)
-				return -1;
-			DPRINT(buf, buf_len);
-			buf_cur = buf;
-			buf_end = buf + buf_len;
-		}
-		ml = MIN(buf_end - buf_cur, len - nr);
-		if ((nl = memchr(buf_cur, '\n', ml))) {
-			nl++;
-			memcpy(dst + nr, buf_cur, nl - buf_cur);
-			nr += nl - buf_cur;
-			buf_cur = nl;
-			return nr;
-		}
-		memcpy(dst + nr, buf_cur, ml);
-		nr += ml;
-		buf_cur += ml;
+	int i = 0;
+	int c;
+	while (i < len) {
+		c = pop3_read();
+		if (c < 0)
+			return -1;
+		dst[i++] = c;
+		if (c == '\n')
+			break;
 	}
-	return nr;
+	DPRINT(dst, i);
+	return i;
 }
 
 static void send_cmd(char *cmd)
@@ -79,14 +71,8 @@ static void send_cmd(char *cmd)
 
 static int is_eoc(char *line, int len)
 {
-	return len < 4 && line[0] == '.' &&
+	return len >= 2 && len <= 3 && line[0] == '.' &&
 		(line[1] == '\r' || line[1] == '\n');
-}
-
-static char *putmem(char *dst, char *src, int len)
-{
-	memcpy(dst, src, len);
-	return dst + len;
 }
 
 static char *cutword(char *dst, char *s)
@@ -99,23 +85,15 @@ static char *cutword(char *dst, char *s)
 	return s;
 }
 
-static char *putstr(char *dst, char *src)
-{
-	int len = strchr(src, '\0') - src;
-	memcpy(dst, src, len + 1);
-	return dst + len;
-}
-
 static void login(char *user, char *pass)
 {
 	char line[BUFFSIZE];
-	int len;
 	sprintf(line, "USER %s\r\n", user);
 	send_cmd(line);
-	len = reply_line(line, sizeof(line));
+	pop3_line(line, sizeof(line));
 	sprintf(line, "PASS %s\r\n", pass);
 	send_cmd(line);
-	len = reply_line(line, sizeof(line));
+	pop3_line(line, sizeof(line));
 }
 
 static void mail_stat(void)
@@ -123,11 +101,11 @@ static void mail_stat(void)
 	char line[BUFFSIZE];
 	int len;
 	send_cmd("STAT\r\n");
-	len = reply_line(line, sizeof(line));
-	print(line, len);
+	len = pop3_line(line, sizeof(line));
+	PRINT(line, len);
 	send_cmd("LIST\r\n");
-	len = reply_line(line, sizeof(line));
-	while ((len = reply_line(line, sizeof(line))) != -1) {
+	len = pop3_line(line, sizeof(line));
+	while ((len = pop3_line(line, sizeof(line))) != -1) {
 		struct mailinfo *mail;
 		char *s = line;
 		if (is_eoc(line, len))
@@ -141,13 +119,12 @@ static void mail_stat(void)
 static void mail_uidl(void)
 {
 	char line[BUFFSIZE];
+	char name[100];
 	int len;
 	int i = 0;
 	send_cmd("UIDL\r\n");
-	len = reply_line(line, sizeof(line));
-	while ((len = reply_line(line, sizeof(line))) != -1 &&
-			!is_eoc(line, len)) {
-		char name[100];
+	len = pop3_line(line, sizeof(line));
+	while ((len = pop3_line(line, sizeof(line))) > 0 && !is_eoc(line, len)) {
 		char *s = line;
 		s = cutword(name, s);
 		s = cutword(mails[i++].id, s);
@@ -199,6 +176,13 @@ static int mail_write(char *dst, char *mail, int len)
 	return 0;
 }
 
+static char *putstr(char *dst, char *src)
+{
+	int len = strchr(src, '\0') - src;
+	memcpy(dst, src, len + 1);
+	return dst + len;
+}
+
 static char *put_from_(char *s)
 {
 	time_t t;
@@ -220,13 +204,16 @@ static int ret_mail(int i)
 {
 	char line[BUFFSIZE];
 	char *s = mailbuf;
-	int len = reply_line(line, sizeof(line));
+	int len = pop3_line(line, sizeof(line));
 	char *dst = NULL;
 	int hdr = 1;
 	int ret;
-	print(mails[i].name, strlen(mails[i].name));
+	PRINT(mails[i].name, strlen(mails[i].name));
 	s = put_from_(s);
-	while ((len = reply_line(line, sizeof(line))) != -1) {
+	while (1) {
+		len = pop3_line(line, sizeof(line));
+		if (len <= 0)		/* end of stream or error */
+			return -1;
 		if (is_eoc(line, len))
 			break;
 		if (len > 1 && line[len - 2] == '\r')
@@ -237,14 +224,15 @@ static int ret_mail(int i)
 			dst = mail_dst(line, len);
 		if (lone_from(line))
 			*s++ = '>';
-		s = putmem(s, line, len);
+		memcpy(s, line, len);
+		s += len;
 	}
 	*s++ = '\n';
 	if (!dst)
 		dst = SPOOL;
 	ret = mail_write(dst, mailbuf, s - mailbuf);
 	sprintf(line, " -> %s\n", dst);
-	print(line, strlen(line));
+	PRINT(line, strlen(line));
 	return ret;
 }
 
@@ -286,7 +274,7 @@ static int ret_mails(int beg, int end, int del)
 				del_mail(i);
 		for (i = beg; i < end; i++)
 			if ((!uidl && size_ok(i)) || (uidl && !uidl_new(i)))
-				reply_line(line, sizeof(line));
+				pop3_line(line, sizeof(line));
 	}
 	return 0;
 }
@@ -294,20 +282,19 @@ static int ret_mails(int beg, int end, int del)
 static int fetch(struct account *account)
 {
 	char line[BUFFSIZE];
-	int len;
 	int batch;
 	int i;
 	nmails = 0;
 	conn = conn_connect(account->server, account->port, account->cert);
 	if (!conn)
 		return -1;
-	buf_cur = buf;
-	buf_end = buf;
+	buf_pos = 0;
+	buf_len = 0;
 	if (account->uidl)
 		uidl = uidl_read(account->uidl);
 	sprintf(line, "fetching %s@%s\n", account->user, account->server);
-	print(line, strlen(line));
-	len = reply_line(line, sizeof(line));
+	PRINT(line, strlen(line));
+	pop3_line(line, sizeof(line));
 	login(account->user, account->pass);
 	mail_stat();
 	if (account->uidl)
@@ -316,7 +303,7 @@ static int fetch(struct account *account)
 	for (i = 0; i < nmails; i += batch)
 		ret_mails(i, MIN(nmails, i + batch), account->del);
 	send_cmd("QUIT\r\n");
-	len = reply_line(line, sizeof(line));
+	pop3_line(line, sizeof(line));
 	conn_close(conn);
 	if (uidl)
 		uidl_save(uidl);
