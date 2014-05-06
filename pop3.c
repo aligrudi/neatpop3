@@ -26,7 +26,7 @@
 
 static struct mailinfo {
 	char name[1 << 4];
-	char id[1 << 5];
+	char id[1 << 6];
 	int size;
 } mails[MAXMAILS];
 static int nmails;
@@ -138,16 +138,14 @@ static void req_mail(int i)
 	send_cmd(cmd);
 }
 
-static char *mail_dst(char *line, int len)
+static char *mail_dst(char *hdr, int len)
 {
 	int i;
-	line[len] = '\0';
-	for (i = 0; i < ARRAY_SIZE(filters); i++) {
-		char *hdr = filters[i].hdr;
-		if (!strncmp(hdr, line, strlen(hdr)) &&
-				strstr(line, filters[i].val))
+	hdr[len] = '\0';
+	for (i = 0; i < ARRAY_SIZE(filters); i++)
+		if (!strncmp(filters[i].hdr, hdr, strlen(filters[i].hdr)) &&
+				strstr(hdr, filters[i].val))
 			return filters[i].dst;
-	}
 	return NULL;
 }
 
