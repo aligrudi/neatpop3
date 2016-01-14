@@ -1,13 +1,20 @@
-POLARPATH = /opt
+# common options
 CC = cc
-CFLAGS = -Wall -Os -I$(POLARPATH)/include/
-LDFLAGS = -L$(POLARPATH)/lib -lpolarssl
+
+# for openssl
+OBJS = pop3.o uidl.o conn_openssl.o
+CFLAGS = -Wall -O2
+LDFLAGS = -lssl
+
+# for mbedtls (polarssl)
+#OBJS = pop3.o uidl.o conn_mbedtls.o
+#CFLAGS = -Wall -O2
+#LDFLAGS = -lpolarssl
 
 all: pop3
-.c.o:
+%.o: %.c conf.h
 	$(CC) -c $(CFLAGS) $<
-pop3.o: config.h
-pop3: pop3.o uidl.o conn.o
-	$(CC) -o $@ $^ $(LDFLAGS)
+pop3: $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS)
 clean:
 	rm -f *.o pop3

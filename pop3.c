@@ -1,9 +1,9 @@
 /*
  * pop3 - a simple pop3 mail client
  *
- * Copyright (C) 2010-2013 Ali Gholami Rudi
+ * Copyright (C) 2010-2016 Ali Gholami Rudi
  *
- * This program is released under the modified BSD license.
+ * This program is released under the Modified BSD license.
  */
 #include <ctype.h>
 #include <errno.h>
@@ -15,7 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include "config.h"
+#include "conf.h"
 #include "uidl.h"
 #include "conn.h"
 
