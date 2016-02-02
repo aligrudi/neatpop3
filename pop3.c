@@ -262,9 +262,13 @@ static int fetch(struct account *account)
 	int failed = 0;
 	int i;
 	nmails = 0;
-	conn = conn_connect(account->server, account->port, account->cert);
+	conn = conn_connect(account->server, account->port);
 	if (!conn)
 		return 1;
+	if (conn_tls(conn, account->cert)) {
+		conn_close(conn);
+		return 1;
+	}
 	buf_pos = 0;
 	buf_len = 0;
 	if (account->uidl)
