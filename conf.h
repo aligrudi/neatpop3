@@ -13,6 +13,7 @@ struct account {
 	char *cert;		/* path of server certificate pem file */
 	int del;		/* delete messages after retrieving */
 	int nopipe;		/* no outstanding commands */
+	int stls;		/* enable starttls */
 } accounts [] = {
 	{"server", "port", "username", "password"},
 };
