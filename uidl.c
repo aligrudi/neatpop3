@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -39,27 +40,18 @@ struct uidl *uidl_read(char *filename)
 	return uidl;
 }
 
-static char *putnl(char *dst, char *src)
-{
-	while (*src)
-		*dst++ = *src++;
-	*dst++ = '\n';
-	*dst = '\0';
-	return dst;
-}
-
 int uidl_find(struct uidl *uidl, char *id)
 {
-	char kw[128];
-	putnl(kw, id);
+	char kw[256];
+	snprintf(kw, sizeof(kw), "%s\n", id);
 	return !!strstr(uidl->txt, kw);
 }
 
 void uidl_add(struct uidl *uidl, char *id)
 {
-	char kw[128];
-	int len = putnl(kw, id) - kw;
-	write(uidl->fd, kw, len);
+	char kw[256];
+	snprintf(kw, sizeof(kw), "%s\n", id);
+	write(uidl->fd, kw, strlen(kw));
 }
 
 void uidl_save(struct uidl *uidl)
