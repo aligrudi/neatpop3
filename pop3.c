@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,6 @@
 #define BUFFSIZE		(1 << 12)
 #define ARRAY_SIZE(a)		(sizeof(a) / sizeof((a)[0]))
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
-#define PRINT(s, l)		(write(1, (s), (l)))
 
 static struct mailinfo {
 	char name[1 << 4];
@@ -57,6 +57,7 @@ static int pop3_read(void)
 	return buf_pos < buf_len ? (unsigned char) buf[buf_pos++] : -1;
 }
 
+/* read a line from the server */
 static int pop3_get(char *dst, int len)
 {
 	int i = 0;
@@ -70,14 +71,29 @@ static int pop3_get(char *dst, int len)
 			break;
 	}
 	dst[i] = '\0';
-	DPRINT(dst, i);
+	LOG(dst);
 	return i;
 }
 
-static void pop3_cmd(char *cmd)
+/* read a pop3 response line */
+static int pop3_res(char *dst, int len)
 {
-	conn_write(conn, cmd, strlen(cmd));
-	DPRINT(cmd, strlen(cmd));
+	pop3_get(dst, len);
+	if (dst[0] != '+')
+		printf("%s", dst);
+	return dst[0] != '+';
+}
+
+/* send a pop3 command */
+static void pop3_cmd(char *cmd, ...)
+{
+	static char buf[512];
+	va_list ap;
+	va_start(ap, cmd);
+	vsnprintf(buf, sizeof(buf), cmd, ap);
+	va_end(ap);
+	conn_write(conn, buf, strlen(buf));
+	LOG(buf);
 }
 
 static int pop3_iseoc(char *line, int len)
@@ -86,26 +102,29 @@ static int pop3_iseoc(char *line, int len)
 		(line[1] == '\r' || line[1] == '\n');
 }
 
-static void pop3_login(char *user, char *pass)
+static int pop3_login(char *user, char *pass)
 {
 	char line[BUFFSIZE];
-	sprintf(line, "USER %s\r\n", user);
-	pop3_cmd(line);
-	pop3_get(line, sizeof(line));
-	sprintf(line, "PASS %s\r\n", pass);
-	pop3_cmd(line);
-	pop3_get(line, sizeof(line));
+	pop3_cmd("USER %s\r\n", user);
+	if (pop3_res(line, sizeof(line)))
+		return 1;
+	pop3_cmd("PASS %s\r\n", pass);
+	if (pop3_res(line, sizeof(line)))
+		return 1;
+	return 0;
 }
 
-static void pop3_stat(void)
+static int pop3_stat(void)
 {
 	char line[BUFFSIZE];
 	int len;
 	pop3_cmd("STAT\r\n");
-	len = pop3_get(line, sizeof(line));
-	PRINT(line, len);
+	if (pop3_res(line, sizeof(line)))
+		return 1;
+	printf("%s", line);
 	pop3_cmd("LIST\r\n");
-	len = pop3_get(line, sizeof(line));
+	if (pop3_res(line, sizeof(line)))
+		return 1;
 	while ((len = pop3_get(line, sizeof(line))) >= 0) {
 		struct mailinfo *mail;
 		if (pop3_iseoc(line, len))
@@ -113,25 +132,26 @@ static void pop3_stat(void)
 		mail = &mails[nmails++];
 		sscanf(line, "%s %d", mail->name, &mail->size);
 	}
+	return 0;
 }
 
-static void pop3_uidl(void)
+static int pop3_uidl(void)
 {
 	char line[BUFFSIZE];
 	char name[128];
 	int len;
 	int i = 0;
 	pop3_cmd("UIDL\r\n");
-	len = pop3_get(line, sizeof(line));
+	if (pop3_res(line, sizeof(line)))
+		return 1;
 	while ((len = pop3_get(line, sizeof(line))) > 0 && !pop3_iseoc(line, len))
 		sscanf(line, "%s %s", name, mails[i++].id);
+	return 0;
 }
 
 static void pop3_retr(int i)
 {
-	char cmd[100];
-	sprintf(cmd, "RETR %s\r\n", mails[i].name);
-	pop3_cmd(cmd);
+	pop3_cmd("RETR %s\r\n", mails[i].name);
 }
 
 static char *mail_dst(char *hdr, int len)
@@ -190,11 +210,12 @@ static int fetch_one(int i)
 {
 	char line[BUFFSIZE];
 	char *s = mailbuf;
-	int len = pop3_get(line, sizeof(line));
 	char *dst = NULL;
 	int hdr = 1;
-	int ret;
-	PRINT(mails[i].name, strlen(mails[i].name));
+	int len, ret;
+	if (pop3_res(line, sizeof(line)))
+		return 1;
+	printf("%s", mails[i].name);
 	s += mail_from_(s);
 	while (1) {
 		len = pop3_get(line, sizeof(line));
@@ -217,16 +238,13 @@ static int fetch_one(int i)
 	if (!dst)
 		dst = SPOOL;
 	ret = mail_write(dst, mailbuf, s - mailbuf);
-	sprintf(line, " -> %s%s\n", dst, ret ? " [failed]" : "");
-	PRINT(line, strlen(line));
+	printf(" -> %s%s\n", dst, ret ? " [failed]" : "");
 	return ret;
 }
 
 static void pop3_del(int i)
 {
-	char cmd[100];
-	sprintf(cmd, "DELE %s\r\n", mails[i].name);
-	pop3_cmd(cmd);
+	pop3_cmd("DELE %s\r\n", mails[i].name);
 }
 
 static int size_ok(int i)
@@ -276,9 +294,11 @@ static int fetch(struct account *account)
 	if (!conn)
 		return 1;
 	if (account->stls) {
-		pop3_get(line, sizeof(line));
+		if (pop3_res(line, sizeof(line)))
+			return 1;
 		pop3_cmd("STLS\r\n");
-		pop3_get(line, sizeof(line));
+		if (pop3_res(line, sizeof(line)))
+			return 1;
 	}
 	if (conn_tls(conn, account->cert)) {
 		conn_close(conn);
@@ -288,14 +308,17 @@ static int fetch(struct account *account)
 	buf_len = 0;
 	if (account->uidl)
 		uidl = uidl_read(account->uidl);
-	sprintf(line, "fetching %s@%s\n", account->user, account->server);
-	PRINT(line, strlen(line));
+	printf("fetching %s@%s\n", account->user, account->server);
 	if (!account->stls)
-		pop3_get(line, sizeof(line));
-	pop3_login(account->user, account->pass);
-	pop3_stat();
+		if (pop3_res(line, sizeof(line)))
+			return 1;
+	if (pop3_login(account->user, account->pass))
+		return 1;
+	if (pop3_stat())
+		return 1;
 	if (account->uidl)
-		pop3_uidl();
+		if (pop3_uidl())
+			return 1;
 	batch = account->nopipe ? 1 : nmails;
 	for (i = 0; i < nmails; i += batch)
 		if ((failed = fetch_mails(i, MIN(nmails, i + batch), account->del)))
@@ -324,8 +347,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sigint);
 	mailbuf = malloc(MAXSIZE);
 	for (i = 0; i < ARRAY_SIZE(accounts); i++)
-		if (fetch(&accounts[i]))
-			return 1;
+		fetch(&accounts[i]);
 	free(mailbuf);
 	return 0;
 }

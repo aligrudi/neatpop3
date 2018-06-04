@@ -2,7 +2,7 @@
 #define MAXSIZE			(1 << 21)
 #define FOLDER			"/home/me/.mailx/"
 #define SPOOL			(FOLDER "inbox")
-#define DPRINT(msg, len)
+#define LOG(msg)
 
 struct account {
 	char *server;		/* server address */
