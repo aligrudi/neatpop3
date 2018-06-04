@@ -16,5 +16,6 @@ all: pop3
 	$(CC) -c $(CFLAGS) $<
 pop3: $(OBJS)
 	$(CC) -o $@ $(OBJS) $(LDFLAGS)
+	chmod 100 $@
 clean:
 	rm -f *.o pop3
