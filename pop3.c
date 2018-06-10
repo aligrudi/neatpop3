@@ -216,6 +216,7 @@ static int fetch_one(int i)
 	if (pop3_res(line, sizeof(line)))
 		return 1;
 	printf("%s", mails[i].name);
+	fflush(stdout);
 	s += mail_from_(s);
 	while (1) {
 		len = pop3_get(line, sizeof(line));
