@@ -7,6 +7,11 @@
 #include <sys/stat.h>
 #include "uidl.h"
 
+struct uidl {
+	char *txt;
+	int fd;
+};
+
 static int file_size(int fd)
 {
 	struct stat st;
@@ -42,9 +47,15 @@ struct uidl *uidl_read(char *filename)
 
 int uidl_find(struct uidl *uidl, char *id)
 {
-	char kw[256];
-	snprintf(kw, sizeof(kw), "%s\n", id);
-	return !!strstr(uidl->txt, kw);
+	char *s = uidl->txt;
+	int len = strlen(id);
+	while (s && *s) {
+		if (!strncmp(s, id, len) && s[len] == '\n')
+			return 1;
+		s = strchr(s, '\n');
+		s = s ? s + 1 : s;
+	}
+	return 0;
 }
 
 void uidl_add(struct uidl *uidl, char *id)
