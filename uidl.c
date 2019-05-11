@@ -10,6 +10,7 @@
 struct uidl {
 	char *txt;
 	int fd;
+	char *prev;	/* the previous matched position */
 };
 
 static int file_size(int fd)
@@ -35,6 +36,7 @@ struct uidl *uidl_read(char *filename)
 {
 	struct uidl *uidl = malloc(sizeof(*uidl));
 	int len;
+	memset(uidl, 0, sizeof(*uidl));
 	uidl->fd = open(filename, O_RDWR | O_CREAT, 0600);
 	len = file_size(uidl->fd);
 	lseek(uidl->fd, 0, SEEK_SET);
@@ -45,17 +47,25 @@ struct uidl *uidl_read(char *filename)
 	return uidl;
 }
 
-int uidl_find(struct uidl *uidl, char *id)
+static char *find_str(char *s, char *id)
 {
-	char *s = uidl->txt;
 	int len = strlen(id);
 	while (s && *s) {
 		if (!strncmp(s, id, len) && s[len] == '\n')
-			return 1;
+			return s;
 		s = strchr(s, '\n');
 		s = s ? s + 1 : s;
 	}
-	return 0;
+	return NULL;
+}
+
+int uidl_find(struct uidl *uidl, char *id)
+{
+	if (uidl->prev)
+		uidl->prev = find_str(uidl->prev, id);
+	if (!uidl->prev)
+		uidl->prev = find_str(uidl->txt, id);
+	return uidl->prev != NULL;
 }
 
 void uidl_add(struct uidl *uidl, char *id)
