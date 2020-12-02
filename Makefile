@@ -9,7 +9,7 @@ LDFLAGS = -lssl
 # for mbedtls (polarssl)
 #OBJS = pop3.o uidl.o conn_mbedtls.o
 #CFLAGS = -Wall -O2
-#LDFLAGS = -lpolarssl
+#LDFLAGS = -lmbedx509 -lmbedtls -lmbedcrypto
 
 all: pop3
 %.o: %.c conf.h
