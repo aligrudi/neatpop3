@@ -1,7 +1,7 @@
 /*
  * A NEAT POP3 MAIL CLIENT
  *
- * Copyright (C) 2010-2017 Ali Gholami Rudi
+ * Copyright (C) 2010-2021 Ali Gholami Rudi
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
