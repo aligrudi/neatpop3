@@ -1,4 +1,3 @@
-#define MAXSIZE			(1 << 21)
 #define FOLDER			"/home/me/.mailx/"
 #define SPOOL			(FOLDER "inbox")
 #define LOG(msg)
@@ -13,6 +12,7 @@ struct account {
 	int del;		/* delete messages after retrieving */
 	int nopipe;		/* no outstanding commands */
 	int stls;		/* enable starttls */
+	int maxsize;		/* maximum message size to fetch */
 } accounts [] = {
 	{"server", "port", "username", "password"},
 };

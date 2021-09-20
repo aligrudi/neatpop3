@@ -38,16 +38,18 @@ static struct mailinfo {
 	char name[1 << 4];
 	char id[1 << 6];
 	int size;
-} *mails;
+} *mails;			/* pop3 message list */
 static int mails_n;
 static int mails_sz;
 static struct uidl *uidl;
 
-static char buf[BUFFSIZE];
+static char buf[BUFFSIZE];	/* pop3 input buffer */
 static int buf_len;
 static int buf_pos;
-static struct conn *conn;
-static char *mailbuf;
+static struct conn *conn;	/* pop3 connection */
+static char *mailbuf;		/* message content */
+static int mailbuf_sz;
+static int mailbuf_maxsz;	/* the maximum message length */
 
 static int pop3_read(void)
 {
@@ -217,14 +219,20 @@ static int pop3_lonefrom_(char *s)
 static int fetch_one(int i)
 {
 	char line[BUFFSIZE];
-	char *s = mailbuf;
 	char *dst = NULL;
+	char *s;
 	int hdr = 1;
 	int len, ret;
+	if (mails[i].size > mailbuf_sz) {
+		free(mailbuf);
+		mailbuf_sz = mails[i].size + 4096;
+		mailbuf = malloc(mailbuf_sz);
+	}
 	if (pop3_res(line, sizeof(line)))
 		return 1;
 	printf("%s", mails[i].name);
 	fflush(stdout);
+	s = mailbuf;
 	s += mail_from_(s);
 	while (1) {
 		len = pop3_get(line, sizeof(line));
@@ -238,6 +246,8 @@ static int fetch_one(int i)
 			hdr = 0;
 		if (hdr && !dst)
 			dst = mail_dst(line, len);
+		if (s + len + 2 >= mailbuf + mailbuf_sz)
+			return 1;
 		if (pop3_lonefrom_(line))
 			*s++ = '>';
 		memcpy(s, line, len);
@@ -258,7 +268,7 @@ static void pop3_del(int i)
 
 static int size_ok(int i)
 {
-	return mails[i].size + 100 < MAXSIZE;
+	return mailbuf_maxsz <= 0 || mails[i].size < mailbuf_maxsz;
 }
 
 static int uidl_new(int i)
@@ -354,9 +364,12 @@ int main(int argc, char *argv[])
 {
 	int i;
 	signal(SIGINT, sigint);
-	mailbuf = malloc(MAXSIZE);
-	for (i = 0; i < ARRAY_SIZE(accounts); i++)
+	mailbuf_sz = 1 << 21;
+	mailbuf = malloc(mailbuf_sz);
+	for (i = 0; i < ARRAY_SIZE(accounts); i++) {
+		mailbuf_maxsz = accounts[i].maxsize;
 		fetch(&accounts[i]);
+	}
 	free(mailbuf);
 	free(mails);
 	return 0;
