@@ -1,4 +1,3 @@
-#define MAXMAILS		(1 << 12)
 #define MAXSIZE			(1 << 21)
 #define FOLDER			"/home/me/.mailx/"
 #define SPOOL			(FOLDER "inbox")

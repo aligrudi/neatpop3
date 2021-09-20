@@ -38,8 +38,9 @@ static struct mailinfo {
 	char name[1 << 4];
 	char id[1 << 6];
 	int size;
-} mails[MAXMAILS];
-static int nmails;
+} *mails;
+static int mails_n;
+static int mails_sz;
 static struct uidl *uidl;
 
 static char buf[BUFFSIZE];
@@ -129,7 +130,14 @@ static int pop3_stat(void)
 		struct mailinfo *mail;
 		if (pop3_iseoc(line, len))
 			break;
-		mail = &mails[nmails++];
+		if (mails_n == mails_sz) {
+			struct mailinfo *mails_old = mails;
+			mails_sz = mails_sz + (mails_sz ? mails_sz : 256);
+			mails = malloc(mails_sz * sizeof(mails[0]));
+			memcpy(mails, mails_old, mails_n * sizeof(mails[0]));
+			free(mails_old);
+		}
+		mail = &mails[mails_n++];
 		sscanf(line, "%s %d", mail->name, &mail->size);
 	}
 	return 0;
@@ -290,7 +298,7 @@ static int fetch(struct account *account)
 	int batch;
 	int failed = 0;
 	int i;
-	nmails = 0;
+	mails_n = 0;
 	conn = conn_connect(account->server, account->port);
 	if (!conn)
 		return 1;
@@ -320,9 +328,9 @@ static int fetch(struct account *account)
 	if (account->uidl)
 		if (pop3_uidl())
 			return 1;
-	batch = account->nopipe ? 1 : nmails;
-	for (i = 0; i < nmails; i += batch)
-		if ((failed = fetch_mails(i, MIN(nmails, i + batch), account->del)))
+	batch = account->nopipe ? 1 : mails_n;
+	for (i = 0; i < mails_n; i += batch)
+		if ((failed = fetch_mails(i, MIN(mails_n, i + batch), account->del)))
 			break;
 	if (!failed) {
 		pop3_cmd("QUIT\r\n");
@@ -350,5 +358,6 @@ int main(int argc, char *argv[])
 	for (i = 0; i < ARRAY_SIZE(accounts); i++)
 		fetch(&accounts[i]);
 	free(mailbuf);
+	free(mails);
 	return 0;
 }
