@@ -223,9 +223,10 @@ static int fetch_one(int i)
 	char *s;
 	int hdr = 1;
 	int len, ret;
-	if (mails[i].size > mailbuf_sz) {
+	int maxsz = mails[i].size * 2 + 4096;
+	if (maxsz > mailbuf_sz) {
 		free(mailbuf);
-		mailbuf_sz = mails[i].size + 4096;
+		mailbuf_sz = maxsz;
 		mailbuf = malloc(mailbuf_sz);
 	}
 	if (pop3_res(line, sizeof(line)))
