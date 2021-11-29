@@ -220,23 +220,16 @@ static int fetch_one(int i)
 {
 	char line[BUFFSIZE];
 	char *dst = NULL;
-	char *s;
+	int pos = 0;
 	int hdr = 1;
-	int len, ret;
-	int maxsz = mails[i].size * 2 + 4096;
-	if (maxsz > mailbuf_sz) {
-		free(mailbuf);
-		mailbuf_sz = maxsz;
-		mailbuf = malloc(mailbuf_sz);
-	}
+	int ret;
 	if (pop3_res(line, sizeof(line)))
 		return 1;
 	printf("%s", mails[i].name);
 	fflush(stdout);
-	s = mailbuf;
-	s += mail_from_(s);
+	pos = mail_from_(mailbuf);
 	while (1) {
-		len = pop3_get(line, sizeof(line));
+		int len = pop3_get(line, sizeof(line));
 		if (len <= 0)		/* end of stream or error */
 			return 1;
 		if (pop3_iseoc(line, len))
@@ -247,17 +240,19 @@ static int fetch_one(int i)
 			hdr = 0;
 		if (hdr && !dst)
 			dst = mail_dst(line, len);
-		if (s + len + 2 >= mailbuf + mailbuf_sz)
-			return 1;
+		while (pos + len + 2 >= mailbuf_sz) {
+			mailbuf_sz += mailbuf_sz ? mailbuf_sz : 512;
+			mailbuf = realloc(mailbuf, mailbuf_sz);
+		}
 		if (pop3_lonefrom_(line))
-			*s++ = '>';
-		memcpy(s, line, len);
-		s += len;
+			mailbuf[pos++] = '>';
+		memcpy(mailbuf + pos, line, len);
+		pos += len;
 	}
-	*s++ = '\n';
+	mailbuf[pos++] = '\n';
 	if (!dst)
 		dst = SPOOL;
-	ret = mail_write(dst, mailbuf, s - mailbuf);
+	ret = mail_write(dst, mailbuf, pos);
 	printf(" -> %s%s\n", dst, ret ? " [failed]" : "");
 	return ret;
 }
